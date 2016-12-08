@@ -92,3 +92,7 @@ ENV/
 
 # vim swap files
 *.sw*
+
+# PLY files
+*parser.out
+*parsetab.py
