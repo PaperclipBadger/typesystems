@@ -188,6 +188,10 @@ class Variable(LambdaTerm):
     def __repr__(self):
         return '<Variable {}>'.format(self.symbol)
 
+    def __str__(self):
+        s = self.symbol if len(self.symbol) == 1 else '({})'.format(self.symbol)
+        return s
+
 
 class Abstraction(LambdaTerm):
     kind = 'abstraction'
@@ -218,7 +222,7 @@ class Abstraction(LambdaTerm):
     @overrides
     def apply_substitution(self, sub):
         sub = sub.copy()
-        sub.pop(self.bound_symbol)
+        sub.pop(self.bound_symbol, None)
         return Abstraction(self.bound_symbol, self.term._app_sub(sub))
 
     @property
@@ -270,8 +274,13 @@ class Abstraction(LambdaTerm):
         return '<Abstraction {} {}>'.format(self.bound_symbol, self.term)
 
     def __str__(self):
-        return """Abstraction on {}
-{}""".format(self.bound_symbol, padlines(str(self.term), '| '))
+        s = '\\' + self.bound_symbol
+        term = self.term
+        while term.kind == self.kind:
+            s += term.bound_symbol
+            term = term.term
+        s += '.' + str(term)
+        return s
 
 class Application(LambdaTerm):
     kind = 'application'
@@ -346,6 +355,11 @@ class Application(LambdaTerm):
         return '<Application {} {}>'.format(self.left, self.right)
 
     def __str__(self):
-        return """Application
-{}
-{}""".format(padlines(str(self.left), '| '), padlines(str(self.right), '| '))
+        left = ('(' + str(self.left) + ')' 
+                if self.left.kind == 'abstraction' else
+                str(self.left))
+        right = ('(' + str(self.right) + ')' 
+                 if self.right.kind in ['application', 'abstraction'] else
+                 str(self.right))
+        return left + right
+

@@ -144,5 +144,47 @@ class EqualityTestCase(unittest.TestCase):
             Application(Variable('y'), Variable('y'))
         )
 
+class strTestCase(unittest.TestCase):
+    def testVariable(self):
+        self.assertEqual(str(Variable('x')), 'x')
+        self.assertEqual(str(Variable('x_1')), '(x_1)')
 
+    def testAbstraction(self):
+        self.assertEqual(str(Abstraction('x', Variable('x'))), r'\x.x')
+        self.assertEqual(
+            str(Abstraction('x', Abstraction('y', 
+                Abstraction('z', Variable('x'))
+            ))), 
+            r'\xyz.x'
+        )
 
+    def testApplication(self):
+        self.assertEqual(str(Application(Variable('x'), Variable('y'))), 'xy')
+        self.assertEqual(
+            str(Application(
+                Application(Variable('x'), Variable('y')),
+                Variable('z')
+            )), 
+            'xyz'
+        )
+        self.assertEqual(
+            str(Application(
+                Variable('x'),
+                Application(Variable('y'), Variable('z'))
+            )), 
+            'x(yz)'
+        )
+        self.assertEqual(
+            str(Application(
+                Abstraction('x', Variable('x')),
+                Variable('y')
+            )), 
+            r'(\x.x)y'
+        )
+        self.assertEqual(
+            str(Application(
+                Variable('y'),
+                Abstraction('x', Variable('x')),
+            )), 
+            r'y(\x.x)'
+        )
