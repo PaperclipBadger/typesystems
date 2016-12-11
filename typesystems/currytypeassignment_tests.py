@@ -57,14 +57,14 @@ class PrincipalPairTestCase(unittest.TestCase):
         self.assertHasType(
             Application(
                 Abstraction('a', Abstraction('b', Variable('a'))),
-                Variable('b')
+                Variable('d')
             ),
             TypeVariable('a')
         )
         self.assertHasType(
             Application(
                 Abstraction('a', Abstraction('b', Variable('a'))),
-                Variable('b')
+                Variable('d')
             ),
             ArrowType(TypeVariable('a'), TypeVariable('b'))
         )

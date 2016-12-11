@@ -148,6 +148,9 @@ class AlphaEqResult:
     def __bool__(self):
         return self.res
 
+    def __repr__(self):
+        return 'AlphaEqResult({!r}, {!r})'.format(self.res, self.sub)
+
 class Variable(LambdaTerm):
     kind = 'variable'
     freshcounter = -1
@@ -198,9 +201,10 @@ class Variable(LambdaTerm):
                     return AlphaEqResult(True, sub)
                 else:
                     return AlphaEqResult(False)
-            else:
-                sub[self] = other
+            elif self == other:
                 return AlphaEqResult(True, sub)
+            else:
+                return AlphaEqResult(False)
         else:
             return AlphaEqResult(False)
 
@@ -323,6 +327,9 @@ class Application(LambdaTerm):
         self.right = right
         self.finalise()
 
+        if self.free_variables & self.bound_variables:
+            raise BarendregtViolation 
+
     @property
     @overrides
     def free_variables(self):
@@ -351,7 +358,7 @@ class Application(LambdaTerm):
     def reduce(self):
         if self.left.kind == 'abstraction':
             right = self.right
-            conflicts = self.left.variables & self.right.variables
+            conflicts = self.left.bound_variables & self.right.bound_variables
             for x in conflicts:
                 right = right.alpha_substitute(x, Variable.fresh())
             return self.left.apply(right)

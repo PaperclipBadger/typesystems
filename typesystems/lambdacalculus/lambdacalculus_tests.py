@@ -11,6 +11,34 @@ S = Abstraction('x', Abstraction('y', Abstraction('z',
 K = Abstraction('x', Abstraction('y', Variable('x')))
 TRUE = K
 FALSE = Abstraction('x', Abstraction('y', Variable('y')))
+ONE = Abstraction('f', Abstraction('x', 
+    Application(Variable('f'), Variable('x'))
+))
+TWO = Abstraction('f', Abstraction('x', 
+    Application(Variable('f'), Application(Variable('f'), Variable('x')))
+))
+THREE = Abstraction('f', Abstraction('x', 
+    Application(Variable('f'), 
+        Application(Variable('f'), 
+            Application(Variable('f'), Variable('x'))
+        )
+    )
+))
+ADD = Abstraction('m', Abstraction('n', Abstraction('f', Abstraction('x',
+    Application(
+        Application(
+            Variable('m'),
+            Variable('f'),
+        ),
+        Application(
+            Application(
+                Variable('n'),
+                Variable('f'),
+            ),
+            Variable('x')
+        )
+    )
+))))
 
 class IsRedexTestCase(unittest.TestCase):
     valid_redex = Application(Abstraction('x', Variable('x')), Variable('y'))
@@ -33,8 +61,8 @@ class IsRedexTestCase(unittest.TestCase):
     def testApplication(self):
         self.assertNotRedex(Application(Variable('x'), Variable('y')))
         self.assertRedex(self.valid_redex)
-        self.assertRedex(Application(self.valid_redex, Variable('x')))
-        self.assertRedex(Application(Variable('x'), self.valid_redex))
+        self.assertRedex(Application(self.valid_redex, Variable('w')))
+        self.assertRedex(Application(Variable('w'), self.valid_redex))
 
 class ReductionTestCase(unittest.TestCase):
     valid_redex = Application(Abstraction('x', 
@@ -45,11 +73,6 @@ class ReductionTestCase(unittest.TestCase):
 
     def testApplication(self):
         self.assertEqual(self.valid_redex.reduce(), self.valid_redex_reduction)
-
-        term = Application(S, K)
-        while term.is_redex:
-            term = term.reduce()
-        self.assertTrue(term.alpha_eq(FALSE))
 
     def testContextualClosure(self):
         self.assertEqual(
@@ -64,6 +87,17 @@ class ReductionTestCase(unittest.TestCase):
             Abstraction('w', self.valid_redex).reduce(),
             Abstraction('w', self.valid_redex_reduction)
         )
+
+    def testEventual(self):
+        term = Application(S, K)
+        while term.is_redex:
+            term = term.reduce()
+        self.assertTrue(term.alpha_eq(FALSE))
+
+        term = Application(Application(ADD, ONE), TWO)
+        while term.is_redex:
+            term = term.reduce()
+        self.assertTrue(term.alpha_eq(THREE))
 
 class AlphaEquivalenceTestCase(unittest.TestCase):
     def assertAlphaEq(self, t0, t1, sub):
@@ -80,7 +114,7 @@ class AlphaEquivalenceTestCase(unittest.TestCase):
         self.assertIs(sub_, None)
 
     def testVariable(self):
-        self.assertAlphaEq(Variable('x'), Variable('y'), {'x': 'y'})
+        self.assertNotAlphaEq(Variable('x'), Variable('y'))
 
     def testAbstraction(self):
         self.assertAlphaEq(
@@ -91,32 +125,36 @@ class AlphaEquivalenceTestCase(unittest.TestCase):
         self.assertNotAlphaEq(
             Abstraction('x', Variable('x')),
             Abstraction('x', Variable('y')),
-        )
+        ) 
+        # \fx.f(e(ex)) != \fx.f(f(fx))
+        self.assertNotAlphaEq(
+            Abstraction('f', Abstraction('x', 
+                Application(Variable('f'), Application(Variable('e'),
+                    Variable('x')
+                ))
+            )),
+            Abstraction('f', Abstraction('x', 
+                Application(Variable('f'), Application(Variable('f'),
+                    Variable('x')
+                ))
+            ))
+        ) 
 
     def testAplication(self):
-        self.assertAlphaEq(
+        self.assertNotAlphaEq(
             Application(Variable('w'), Variable('x')),
             Application(Variable('y'), Variable('z')),
-            {'w': 'y', 'x': 'z'}
         )
         self.assertAlphaEq(
-            Application(Variable('x'), Variable('y')),
-            Application(Variable('y'), Variable('x')),
-            {'x': 'y', 'y': 'x'}
-        )
-        self.assertNotAlphaEq(
-            Application(Variable('x'), Variable('x')),
-            Application(Variable('y'), Variable('x'))
-        )
-        self.assertNotAlphaEq(
-            Application(Variable('x'), Variable('x')),
-            Application(Variable('x'), Variable('y'))
+            Application(Abstraction('x', Variable('x')), Variable('y')),
+            Application(Abstraction('z', Variable('z')), Variable('y')),
+            {'x': 'z'}
         )
 
     def testSubstitution(self):
         a = Application(Abstraction('x', Variable('y')), Variable('z'))
-        b = Application(Abstraction('a', Variable('b')), Variable('c'))
-        s = {'x': 'a', 'y': 'b', 'z': 'c'}
+        b = Application(Abstraction('a', Variable('y')), Variable('z'))
+        s = {'x': 'a'}
         s_ = {Variable(k): Variable(v) for k, v in s.items()}
         self.assertAlphaEq(a, b, s)
         self.assertEqual(a.apply_alpha_substitution(s_), b)
