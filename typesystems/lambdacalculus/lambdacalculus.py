@@ -2,6 +2,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from copy import deepcopy
 from overrides import overrides
+import string
 
 from ..utils import Finalisable
 
@@ -150,16 +151,21 @@ class AlphaEqResult:
 class Variable(LambdaTerm):
     kind = 'variable'
     freshcounter = -1
+    freshletters = set(string.ascii_lowercase)
 
     def __init__(self, symbol):
         assert isinstance(symbol, str)
+        self.freshletters.discard(symbol)
         self.symbol = symbol
         self.finalise()
 
     @classmethod
     def fresh(cls):
-        cls.freshcounter += 1
-        return cls('x_{:02d}'.format(cls.freshcounter))
+        if cls.freshletters:
+            return cls(cls.freshletters.pop())
+        else:
+            cls.freshcounter += 1
+            return cls('x_{:02d}'.format(cls.freshcounter))
 
     @property
     @overrides
