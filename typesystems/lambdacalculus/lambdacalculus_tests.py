@@ -1,6 +1,17 @@
 import unittest
 from .lambdacalculus import *
 
+S = Abstraction('x', Abstraction('y', Abstraction('z',
+    Application(
+        Application(Variable('x'), Variable('z')),
+        Application(Variable('y'), Variable('z'))
+    )
+)))
+
+K = Abstraction('x', Abstraction('y', Variable('x')))
+TRUE = K
+FALSE = Abstraction('x', Abstraction('y', Variable('y')))
+
 class IsRedexTestCase(unittest.TestCase):
     valid_redex = Application(Abstraction('x', Variable('x')), Variable('y'))
 
@@ -34,6 +45,11 @@ class ReductionTestCase(unittest.TestCase):
 
     def testApplication(self):
         self.assertEqual(self.valid_redex.reduce(), self.valid_redex_reduction)
+
+        term = Application(S, K)
+        while term.is_redex:
+            term = term.reduce()
+        self.assertTrue(term.alpha_eq(FALSE))
 
     def testContextualClosure(self):
         self.assertEqual(

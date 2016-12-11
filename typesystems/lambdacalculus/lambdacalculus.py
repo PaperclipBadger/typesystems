@@ -25,13 +25,12 @@ BarendregtViolation = BarendregtViolation()
 
 class LambdaTerm(Finalisable, metaclass=ABCMeta):
     kind = 'term'
-    _fresh_name_counter = -1
 
-    @classmethod
-    def fresh_name(class_):
-        count += 1
-        return 'x_{:02d}'.format(count)
-
+    @property
+    def variables(self):
+        assert not self.free_variables & self.bound_variables
+        return self.free_variables | self.bound_variables
+    
     @abstractproperty
     def free_variables(self):
         NotImplemented
@@ -119,6 +118,9 @@ class LambdaTerm(Finalisable, metaclass=ABCMeta):
         """Renames free and bound variables."""
         NotImplemented
 
+    def alpha_substitute(self, a, b):
+        return self.apply_alpha_substitution({a: b})
+
     @abstractmethod
     def __eq__(self, other):
         """True iff two terms are exactly equal."""
@@ -147,11 +149,17 @@ class AlphaEqResult:
 
 class Variable(LambdaTerm):
     kind = 'variable'
-    
+    freshcounter = -1
+
     def __init__(self, symbol):
         assert isinstance(symbol, str)
         self.symbol = symbol
         self.finalise()
+
+    @classmethod
+    def fresh(cls):
+        cls.freshcounter += 1
+        return cls('x_{:02d}'.format(cls.freshcounter))
 
     @property
     @overrides
@@ -336,7 +344,12 @@ class Application(LambdaTerm):
     @overrides
     def reduce(self):
         if self.left.kind == 'abstraction':
-            return self.left.apply(self.right)
+            right = self.right
+            conflicts = self.left.variables & self.right.variables
+            for x in conflicts:
+                right = right.alpha_substitute(x, Variable.fresh())
+            print(self.left.bound_variables, right)
+            return self.left.apply(right)
         elif self.left.is_redex:
             return Application(self.left.reduce(), self.right)
         elif self.right.is_redex:
@@ -346,11 +359,14 @@ class Application(LambdaTerm):
 
     @overrides
     def _alpha_eq_helper(self, other, sub):
-        res, sub = self.left._alpha_eq_helper(other.left, sub)
-        if res:
-            res, sub = self.right._alpha_eq_helper(other.right, sub)
+        if other.kind == self.kind:
+            res, sub = self.left._alpha_eq_helper(other.left, sub)
             if res:
-                return AlphaEqResult(True, sub)
+                res, sub = self.right._alpha_eq_helper(other.right, sub)
+                if res:
+                    return AlphaEqResult(True, sub)
+                else:
+                    return AlphaEqResult(False)
             else:
                 return AlphaEqResult(False)
         else:
