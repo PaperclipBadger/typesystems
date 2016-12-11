@@ -54,6 +54,7 @@ class AlphaEquivalenceTestCase(unittest.TestCase):
         self.assertTrue(t0.alpha_eq(t1))
         res, sub_ = t0.alpha_eq(t1)
         self.assertTrue(res)
+        sub = dict((Variable(k), Variable(v)) for k, v in sub.items())
         self.assertEqual(sub_, sub)
 
     def assertNotAlphaEq(self, t0, t1):
@@ -100,8 +101,9 @@ class AlphaEquivalenceTestCase(unittest.TestCase):
         a = Application(Abstraction('x', Variable('y')), Variable('z'))
         b = Application(Abstraction('a', Variable('b')), Variable('c'))
         s = {'x': 'a', 'y': 'b', 'z': 'c'}
+        s_ = dict((Variable(k), Variable(v)) for k, v in s.items())
         self.assertAlphaEq(a, b, s)
-        self.assertEqual(a.apply_alpha_substitution(s), b)
+        self.assertEqual(a.apply_alpha_substitution(s_), b)
 
 class EqualityTestCase(unittest.TestCase):
     def testVariable(self):
