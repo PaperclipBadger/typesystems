@@ -1,7 +1,7 @@
 import unittest
 from .currytypes import *
 
-class UnifiTestCase(unittest.TestCase):
+class UnificationTestCase(unittest.TestCase):
     def assertUnifiable(self, *args):
         self.assertTrue(unifiable(*args))
         s = unify(*args)

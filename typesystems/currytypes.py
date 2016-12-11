@@ -1,12 +1,13 @@
+# -*- coding: utf-8 -*-
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections.abc import MutableMapping  
 from overrides import overrides
 
-from .utils import Finalisable
+from .utils import Finalisable, Substitution
 
 class UnificationError(Exception):
     def __init__(self, t1, t2):
-        message = "could not unify types {} and {}".format(t1, t2)
+        message = "could not unify types {} and {}".format(str(t1), str(t2))
         super().__init__(message)
 
 class CurryType(Finalisable, metaclass=ABCMeta):
@@ -31,7 +32,7 @@ class CurryType(Finalisable, metaclass=ABCMeta):
         NotImplemented
 
     def substitute(self, a, b):
-        return self.apply_substitution(TypeSubstitution((a, b)))
+        return self.apply_substitution(Substitution((a, b)))
 
 class ArrowType(CurryType):
     kind = 'arrowtype'
@@ -88,10 +89,16 @@ class ConstantType(CurryType):
 
 class TypeVariable(CurryType):
     kind = 'typevariable'
+    freshcounter = -1
 
     def __init__(self, name):
         self.name = name
         self.finalise()
+
+    @classmethod
+    def fresh(cls):
+        cls.freshcounter += 1
+        return cls('φ_{}'.format(cls.freshcounter))
 
     @overrides
     def __eq__(self, other):
@@ -112,54 +119,6 @@ class TypeVariable(CurryType):
     def __repr__(self):
         return 'TypeVariable({!r})'.format(self.name)
 
-class TypeSubstitution(MutableMapping):
-    def __init__(self, *args, **kwargs):
-        self.dict = dict(*args, **kwargs)
-
-    # --------------------- all of this is boring ---------------------
-    def __getattr__(self, name):
-        return getattr(self.dict, name)
-
-    def __contains__(self, item):
-        return item in self.dict
-
-    def __getitem__(self, name):
-        return self.dict[name]
-
-    def __setitem__(self, name, value):
-        self.dict[name] = value
-
-    def __delitem__(self, name):
-        del self.dict[name]
-
-    def __iter__(self):
-        return iter(self.dict)
-
-    def __len__(self):
-        return len(self.dict)
-    # -----------------------------------------------------------------
-
-    def fromkeys(self, *args, **kwargs):
-        d = self.dict.fromkeys(*args, **kwargs)
-        s = self.__class__(d)
-        return s
-
-    def copy(self, *args, **kwargs):
-        d = self.dict.copy(*args, **kwargs)
-        s = self.__class__(d)
-        return s
-
-    def __call__(self, currytype):
-        return currytype.apply_substitution(self)
-
-    def __rshift__(self, other):
-        """Use the >> operator to chain together substitutions."""
-        res = {k: self(v) for k, v in other.items()}
-        for k, v in self.items():
-            if k not in other:
-                res[k] = v
-        return self.__class__(res)
-
 def unify(a, b, *args):
     if args:
         s0 = unify(a, b)
@@ -167,9 +126,9 @@ def unify(a, b, *args):
         return s1 >> s0
     if a.kind == 'typevariable':
         if b.kind == 'typevariable' and a.name == b.name: 
-            return TypeSubstitution()
+            return Substitution()
         elif b.kind == 'typevariable' or a not in b: 
-            return TypeSubstitution({a: b})
+            return Substitution({a: b})
         else:
             raise UnificationError(a, b)
     elif b.kind == 'typevariable':
@@ -179,7 +138,7 @@ def unify(a, b, *args):
         s1 = unify(s0(a.right), s0(b.right))
         return s0 >> s1
     elif a.kind == b.kind == 'constanttype' and a.name == b.name:
-        return TypeSubstitution()
+        return Substitution()
     else:
         raise UnificationError(a, b)
 
