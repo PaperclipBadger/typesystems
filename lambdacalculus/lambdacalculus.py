@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod, abstractproperty
 from copy import deepcopy
 from overrides import overrides
+
+from ..utils import Finalisable
 
 linesep = '\n'
 def padlines(lines, pad):
@@ -12,7 +14,16 @@ class NotReduceable(Exception):
         super().__init__("The term{sep}{}{sep}is not reduceable."
                          .format(str(term), sep=linesep))
 
-class LambdaTerm(ABC):
+class BarendregtViolation(Exception):
+    def __init__(self):
+        super().__init__("Barendregt's convention has been violated!")
+
+    def __call__(self):
+        return self
+
+BarendregtViolation = BarendregtViolation()
+
+class LambdaTerm(Finalisable, metaclass=ABCMeta):
     kind = 'term'
     _fresh_name_counter = -1
 
@@ -113,6 +124,10 @@ class LambdaTerm(ABC):
         """True iff two terms are exactly equal."""
         NotImplemented
 
+    @abstractmethod
+    def __hash__(self, other):
+        NotImplemented
+
 class AlphaEqResult:
     """Much like a ``namedtuple``, but with better booleanness."""
     def __init__(self, res, sub=None):
@@ -134,12 +149,14 @@ class Variable(LambdaTerm):
     kind = 'variable'
     
     def __init__(self, symbol):
+        assert isinstance(symbol, str)
         self.symbol = symbol
+        self.finalise()
 
     @property
     @overrides
     def free_variables(self):
-        return {self.symbol}
+        return {self}
 
     @property
     @overrides
@@ -148,7 +165,7 @@ class Variable(LambdaTerm):
 
     @overrides
     def apply_substitution(self, sub):
-        return deepcopy(sub.get(self.symbol, self))
+        return sub.get(self, self)
 
     @property
     @overrides
@@ -162,31 +179,31 @@ class Variable(LambdaTerm):
     @overrides
     def _alpha_eq_helper(self, other, sub):
         if other.kind == self.kind:
-            if self.symbol in sub:
-                if sub[self.symbol] == other.symbol:
+            if self in sub:
+                if sub[self] == other:
                     return AlphaEqResult(True, sub)
                 else:
                     return AlphaEqResult(False)
             else:
-                sub[self.symbol] = other.symbol
+                sub[self] = other
                 return AlphaEqResult(True, sub)
         else:
             return AlphaEqResult(False)
 
     @overrides
     def apply_alpha_substitution(self, sub):
-        return (Variable(sub[self.symbol]) if self.symbol in sub else
-                deepcopy(self))
+        return sub[self] if self in sub else self
 
     @overrides
     def __eq__(self, other):
-        try:
-            return other.kind == self.kind and other.symbol == self.symbol
-        except AttributeError:
-            return False
+        return other.kind == self.kind and other.symbol == self.symbol
+
+    @overrides
+    def __hash__(self):
+        return hash(self.symbol) ^ hash(self.kind)
 
     def __repr__(self):
-        return '<Variable {}>'.format(self.symbol)
+        return 'Variable({!r})'.format(self.symbol)
 
     def __str__(self):
         s = self.symbol if len(self.symbol) == 1 else '({})'.format(self.symbol)
@@ -196,34 +213,35 @@ class Variable(LambdaTerm):
 class Abstraction(LambdaTerm):
     kind = 'abstraction'
 
-    def __init__(self, bound_symbol, term):
-        self.bound_symbol = bound_symbol
+    def __init__(self, binds, term):
+        self.binds = Variable(binds)
         self.term = term
+        self.finalise()
 
         if self.free_variables & self.bound_variables:
-            raise Exception("Barendregt's convention violation!")
+            raise BarendregtViolation 
 
     @property
     @overrides
     def free_variables(self):
         v = self.term.free_variables
-        v.discard(self.bound_symbol)
+        v.discard(self.binds)
         return v
 
     @property
     @overrides
     def bound_variables(self):
         v = self.term.bound_variables
-        if self.bound_symbol in v:
-            raise Exception("Barendregt's convention violation!")
-        v.add(self.bound_symbol)
+        if self.binds in v:
+            raise BarendregtViolation
+        v.add(self.binds)
         return v
 
     @overrides
     def apply_substitution(self, sub):
         sub = sub.copy()
-        sub.pop(self.bound_symbol, None)
-        return Abstraction(self.bound_symbol, self.term._app_sub(sub))
+        sub.pop(self.binds, None)
+        return Abstraction(self.binds.symbol, self.term._app_sub(sub))
 
     @property
     @overrides
@@ -233,19 +251,19 @@ class Abstraction(LambdaTerm):
     @overrides
     def reduce(self):
         if self.term.is_redex:
-            return Abstraction(self.bound_symbol, self.term.reduce())
+            return Abstraction(self.binds.symbol, self.term.reduce())
         else:
             raise NotReduceable(self)
 
     def apply(self, term):
-        return self.term.substitute(self.bound_symbol, term)
+        return self.term.substitute(self.binds, term)
 
     @overrides
     def _alpha_eq_helper(self, other, sub):
         if other.kind == self.kind:
-            if self.bound_symbol in sub:
-                raise Exception("Barendregt's convention violation!")
-            sub[self.bound_symbol] = other.bound_symbol
+            if self.binds in sub:
+                raise BarendregtViolation
+            sub[self.binds] = other.binds
             res, sub = self.term._alpha_eq_helper(other.term, sub)
             if res:
                 return AlphaEqResult(True, sub)
@@ -257,27 +275,28 @@ class Abstraction(LambdaTerm):
     @overrides
     def apply_alpha_substitution(self, sub):
         return Abstraction(
-            sub[self.bound_symbol], 
+            sub.get(self.binds, self.binds).symbol, 
             self.term.apply_alpha_substitution(sub)
         )
 
     @overrides
     def __eq__(self, other):
-        try:
-            return (other.kind == self.kind and
-                    other.bound_symbol == self.bound_symbol and
-                    other.term == self.term)
-        except AttributeError:
-            return False
+        return (other.kind == self.kind and
+                other.binds == self.binds and
+                other.term == self.term)
+
+    @overrides
+    def __hash__(self):
+        return hash(self.binds) ^ hash(self.term) ^ hash(self.kind)
 
     def __repr__(self):
-        return '<Abstraction {} {}>'.format(self.bound_symbol, self.term)
+        return 'Abstraction({!r}, {!r})'.format(self.binds.symbol, self.term)
 
     def __str__(self):
-        s = '\\' + self.bound_symbol
+        s = '\\' + str(self.binds)
         term = self.term
         while term.kind == self.kind:
-            s += term.bound_symbol
+            s += str(term.binds)
             term = term.term
         s += '.' + str(term)
         return s
@@ -288,6 +307,7 @@ class Application(LambdaTerm):
     def __init__(self, left, right):
         self.left = left
         self.right = right
+        self.finalise()
 
     @property
     @overrides
@@ -311,11 +331,11 @@ class Application(LambdaTerm):
     @overrides
     def is_redex(self):
         return (self.left.is_redex or self.right.is_redex or 
-                isinstance(self.left, Abstraction))
+                self.left.kind == 'abstraction')
 
     @overrides
     def reduce(self):
-        if isinstance(self.left, Abstraction):
+        if self.left.kind == 'abstraction':
             return self.left.apply(self.right)
         elif self.left.is_redex:
             return Application(self.left.reduce(), self.right)
@@ -345,14 +365,15 @@ class Application(LambdaTerm):
 
     @overrides
     def __eq__(self, other):
-        try:
-            return (other.kind == self.kind and
-                    other.left == self.left and other.right == self.right)
-        except AttributeError:
-            return False
+        return (other.kind == self.kind and
+                other.left == self.left and other.right == self.right)
+
+    @overrides
+    def __hash__(self):
+        return hash(self.left) ^ hash(self.right) ^ hash(self.kind)
 
     def __repr__(self):
-        return '<Application {} {}>'.format(self.left, self.right)
+        return 'Application({!r}, {!r})'.format(self.left, self.right)
 
     def __str__(self):
         left = ('(' + str(self.left) + ')' 
