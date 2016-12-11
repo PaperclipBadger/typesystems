@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from collections.abc import MutableMapping  
 from overrides import overrides
 
-from ..utils import Finalisable
+from .utils import Finalisable
 
 class UnificationError(Exception):
     def __init__(self, t1, t2):
