@@ -87,6 +87,9 @@ class ConstantType(CurryType):
     def __repr__(self):
         return 'ConstantType({!r})'.format(self.name)
 
+    def __str__(self):
+        return self.name
+
 class TypeVariable(CurryType):
     kind = 'typevariable'
     freshcounter = -1
@@ -98,7 +101,7 @@ class TypeVariable(CurryType):
     @classmethod
     def fresh(cls):
         cls.freshcounter += 1
-        return cls('φ_{}'.format(cls.freshcounter))
+        return cls('φ_{:02d}'.format(cls.freshcounter))
 
     @overrides
     def __eq__(self, other):
@@ -118,6 +121,9 @@ class TypeVariable(CurryType):
 
     def __repr__(self):
         return 'TypeVariable({!r})'.format(self.name)
+
+    def __str__(self):
+        return self.name
 
 def unify(a, b, *args):
     if args:
