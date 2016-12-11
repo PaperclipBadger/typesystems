@@ -348,7 +348,6 @@ class Application(LambdaTerm):
             conflicts = self.left.variables & self.right.variables
             for x in conflicts:
                 right = right.alpha_substitute(x, Variable.fresh())
-            print(self.left.bound_variables, right)
             return self.left.apply(right)
         elif self.left.is_redex:
             return Application(self.left.reduce(), self.right)
